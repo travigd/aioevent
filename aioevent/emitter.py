@@ -4,12 +4,19 @@ Provides EventEmitter class.
 
 import asyncio
 import functools
-from typing import Callable, Dict, List, Type
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Type,
+    Union,
+    Coroutine,
+)
 from .event import BaseEvent
 
 
 # pylint: disable=invalid-name
-EventCallbackType = Callable[[BaseEvent], None]
+EventCallbackType = Callable[[BaseEvent], Union[None, Coroutine[None, None, None]]]
 
 
 class EventEmitter:
