@@ -3,7 +3,7 @@ Provides EventEmitter class.
 """
 
 import asyncio
-import functools
+from functools import partial
 from typing import (
     Callable,
     Dict,
@@ -11,8 +11,11 @@ from typing import (
     Type,
     Union,
     Coroutine,
+    Set,
 )
+
 from .event import BaseEvent
+from .subscription import Subscription
 
 
 # pylint: disable=invalid-name
@@ -28,7 +31,7 @@ class EventEmitter:
             be callables that accept a single argument: the event being emitted.
     """
 
-    _event_listeners: Dict[Type[BaseEvent], List[EventCallbackType]]
+    _subscriptions: Dict[Type[BaseEvent], Set[Subscription]]
 
     def __init__(
             self,
@@ -37,10 +40,10 @@ class EventEmitter:
             **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.event_loop = loop or asyncio.get_event_loop()
-        self._event_listeners = {}
+        self._loop = loop or asyncio.get_event_loop()
+        self._subscriptions = {}
 
-    def listen(self, event_type: Type[BaseEvent], callback: EventCallbackType):
+    def listen(self, event_type: Type[BaseEvent], callback: EventCallbackType) -> "Subscription":
         """
         Register a callback to be fired when an event is emitted.
         :param event_type: The type of event (subclass of :py:class:`BaseEvent`)
@@ -50,9 +53,15 @@ class EventEmitter:
                 `event_type` that was emitted.
         :return:
         """
-        if event_type not in self._event_listeners:
-            self._event_listeners[event_type] = []
-        self._event_listeners[event_type].append(callback)
+        if event_type not in self._subscriptions:
+            self._subscriptions[event_type] = set()
+        subscription = Subscription(
+            callback,
+            unsubscribe=partial(self._remove_subscription, event_type),
+            loop=self._loop,
+        )
+        self._subscriptions[event_type].add(subscription)
+        return subscription
 
     def emit(self, event: BaseEvent):
         """
@@ -60,9 +69,13 @@ class EventEmitter:
         :param event: The event to be omitted.
         :return:
         """
-        handlers = self._get_handlers_for_type(type(event))
-        for handler in handlers:
-            self._call_handler(handler, event)
+        if not isinstance(event, BaseEvent):
+            raise ValueError(f"Events must be subclasses of BaseEvent (got {repr(event)}).")
+        if event.target is None:
+            event.target = self
+        subscriptions = self._get_subscriptions_for_event_type(type(event))
+        for subscription in subscriptions:
+            subscription.invoke(event)
 
     def proxy(self, emitter):
         """
@@ -83,9 +96,9 @@ class EventEmitter:
         """
         self.emit(event)
 
-    def _get_handlers_for_type(
+    def _get_subscriptions_for_event_type(
             self, event_type: Type,
-    ) -> List[EventCallbackType]:
+    ) -> List["Subscription"]:
         """
         Get all handlers for an event type.
 
@@ -97,15 +110,16 @@ class EventEmitter:
         """
         handlers = []
         if not issubclass(event_type, BaseEvent):
-            return []
-        if event_type in self._event_listeners:
-            handlers.extend(self._event_listeners[event_type])
+            raise ValueError(f"Event classes must extend BaseEvent (got {repr(event_type)}).")
+        if event_type in self._subscriptions:
+            handlers.extend(self._subscriptions[event_type])
         for event_supertype in event_type.__bases__:
-            handlers.extend(self._get_handlers_for_type(event_supertype))
+            if not issubclass(event_supertype, BaseEvent):
+                continue
+            handlers.extend(self._get_subscriptions_for_event_type(event_supertype))
         return handlers
 
-    def _call_handler(self, handler: EventCallbackType, event: BaseEvent):
-        if asyncio.iscoroutinefunction(handler):
-            asyncio.ensure_future(handler(event), loop=self.event_loop)
-        else:
-            self.event_loop.call_soon(functools.partial(handler, event))
+    def _remove_subscription(self, event_type: Type["BaseEvent"], subscription: "Subscription"):
+        if event_type in self._subscriptions:
+            if subscription in self._subscriptions[event_type]:
+                self._subscriptions[event_type].remove(subscription)

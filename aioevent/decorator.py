@@ -1,10 +1,17 @@
-from typing import Type
+from typing import (
+    Type,
+    TYPE_CHECKING,
+    Callable,
+)
 
 from .emitter import EventEmitter
 from .event import BaseEvent
 
+if TYPE_CHECKING:
+    from .subscription import Subscription
 
-def event_listener(emitter: EventEmitter, event_type: Type[BaseEvent]):
+
+def event_listener(emitter: EventEmitter, event_type: Type[BaseEvent]) -> Callable[[Callable], "Subscription"]:
     """
     A decorator factory for creating easy inline event listeners.
 
@@ -13,17 +20,19 @@ def event_listener(emitter: EventEmitter, event_type: Type[BaseEvent]):
         MyEvent = type("MyEvent", (BaseEvent, ), {})
 
         @event_listener(my_emitter, MyEvent)
-        def on_my_event(event):
+        def my_event_subscription(event):
             print("Got MyEvent!")
 
         # Prints "Got MyEvent!" on next iteration of event loop.
         my_emitter.emit(MyEvent())
 
+        # Unsubscribe from future events.
+        my_event_subscription.unsubscribe()
+
     :param emitter:
     :param event_type:
     :return:
     """
-    def decorator(method):
-        emitter.listen(event_type, method)
-        return method
+    def decorator(method) -> "Subscription":
+        return emitter.listen(event_type, method)
     return decorator

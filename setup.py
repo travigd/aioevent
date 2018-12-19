@@ -4,7 +4,7 @@ setup(
     name="aioevent",
     author="Travis DePrato",
     author_email="travisdeprato@gmail.com",
-    version="1.1.0",
+    version="1.2.0",
     description="Events for asyncio.",
     packages=find_packages("."),
     install_requires=[],
