@@ -4,6 +4,10 @@ from typing import Callable, NamedTuple
 
 
 class Subscription:
+    """
+    A subscription instance.
+    """
+
     def __init__(
             self,
             method: Callable,
@@ -14,6 +18,7 @@ class Subscription:
         self._method = method
         self._unsubscribe = unsubscribe
         self._loop = loop
+        self._context_manager_entered = False
 
     def invoke(self, *args, **kwargs):
         if asyncio.iscoroutinefunction(self._method):
@@ -23,3 +28,11 @@ class Subscription:
 
     def unsubscribe(self):
         self._unsubscribe(self)
+
+    def __enter__(self):
+        if self._context_manager_entered:
+            raise RuntimeError("Cannot double-enter Subscription context manager.")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.unsubscribe()

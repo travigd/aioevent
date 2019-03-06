@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 class BaseEvent:
     """
     ABC for events.
+
+    :ivar target: The source of the event; this should **always** refer to the
+        :class:`EventEmitter` that the event was emitted from.
     """
 
     def __init__(self, *, target: "EventEmitter" = None):
