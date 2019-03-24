@@ -7,7 +7,6 @@ from functools import partial
 from typing import (
     Callable,
     Dict,
-    List,
     Type,
     Union,
     Coroutine,
@@ -98,25 +97,27 @@ class EventEmitter:
 
     def _get_subscriptions_for_event_type(
             self, event_type: Type,
-    ) -> List["Subscription"]:
+    ) -> Set["Subscription"]:
         """
         Get all handlers for an event type.
 
-        This method will walk up the subclass tree so that (e.g.) a handle
+        This method will walk up the subclass graph so that a handler
         for `SomeEventType` will also handle events of type
         `SubclassOfSomeEventType`.
         :param event_type: The event type to find handlers for.
         :return: A list of event handlers.
         """
-        handlers = []
+        # Note: See `test_event_multiple_inheritance.py` for a description about
+        #       why we need to use a set here (rather than a list).
+        handlers = set()
         if not issubclass(event_type, BaseEvent):
             raise ValueError(f"Event classes must extend BaseEvent (got {repr(event_type)}).")
         if event_type in self._subscriptions:
-            handlers.extend(self._subscriptions[event_type])
+            handlers.update(self._subscriptions[event_type])
         for event_supertype in event_type.__bases__:
             if not issubclass(event_supertype, BaseEvent):
                 continue
-            handlers.extend(self._get_subscriptions_for_event_type(event_supertype))
+            handlers.update(self._get_subscriptions_for_event_type(event_supertype))
         return handlers
 
     def _remove_subscription(self, event_type: Type["BaseEvent"], subscription: "Subscription"):
